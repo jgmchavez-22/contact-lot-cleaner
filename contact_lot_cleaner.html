@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact Lot Cleaner</title>
+<!-- Local libraries — no internet required. Keep these two .js files in the same folder as this page. -->
+<script src="xlsx.full.min.js"></script>
+<script src="libphonenumber-max.js"></script>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a2129; --panel2:#222b35; --line:#2e3a47;
+    --text:#e7edf3; --muted:#93a1b0; --accent:#4da3ff; --accent2:#2b6cb0;
+    --good:#3fb950; --warn:#d29922; --bad:#f85149; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.45}
+  header{padding:22px 26px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#16202b,#0f1419)}
+  header h1{margin:0;font-size:20px;font-weight:650}
+  header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  main{max-width:1180px;margin:0 auto;padding:22px 26px 60px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card h2{margin:0 0 10px;font-size:14px;font-weight:650;letter-spacing:.2px}
+  .card .hint{color:var(--muted);font-size:12px;margin:0 0 12px}
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+  input[type=text],textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+       border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:96px}
+  input[type=text]:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .drop{border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);
+       cursor:pointer;transition:.15s;font-size:13px;background:var(--panel2)}
+  .drop.drag{border-color:var(--accent);color:var(--text);background:#1d2937}
+  .drop strong{color:var(--text)}
+  .file-row{margin-top:10px;font-size:13px;color:var(--text);display:none}
+  .file-row .tag{color:var(--good)}
+  .btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+  button{cursor:pointer;border:none;border-radius:8px;padding:11px 18px;font-size:13px;font-weight:600;font-family:inherit}
+  .primary{background:var(--accent);color:#06121f}
+  .primary:disabled{opacity:.45;cursor:not-allowed}
+  .ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  .ghost:disabled{opacity:.4;cursor:not-allowed}
+  .row2{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .small{font-size:11px;color:var(--muted);margin-top:6px}
+  #summary{margin-top:20px;display:none}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px}
+  .chip b{font-weight:700}
+  .chip.new b{color:var(--good)} .chip.dnc b{color:var(--bad)} .chip.out b{color:var(--warn)}
+  .tablewrap{margin-top:16px;overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:460px;display:none}
+  table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+  th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:600;z-index:1}
+  tr:hover td{background:#1c2530}
+  td.rc-dnc{color:var(--bad)} td.rc-out{color:var(--warn)} td.rc-new{color:var(--good)}
+  #log{margin-top:14px;font-size:12px;color:var(--muted);white-space:pre-wrap}
+  .err{color:var(--bad)}
+  a.dl{display:none}
+  .regions{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .regions-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;gap:10px;flex-wrap:wrap}
+  .regions-head label{margin:0}
+  .allreg{display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;font-weight:600;cursor:pointer}
+  .allreg input{margin:0;cursor:pointer;width:15px;height:15px;accent-color:var(--accent)}
+  .region-chips{display:flex;flex-wrap:wrap;gap:8px}
+  .region-chip{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);
+       border-radius:18px;padding:5px 12px;font-size:12px;cursor:pointer;user-select:none;transition:.12s}
+  .region-chip:hover{border-color:#3d4d5e}
+  .region-chip input{margin:0;cursor:pointer;accent-color:var(--accent)}
+  .region-chip.on{border-color:var(--accent);background:#1d2937;color:#fff}
+  .region-chip .cnt{color:var(--muted);font-size:10px}
+  .region-chip.on .cnt{color:#9fc7ff}
+</style>
+</head>
+<body>
+<header>
+  <h1>Contact Lot Cleaner</h1>
+  <p>Upload a contact lot, set your targets, and download a dialer-ready, cleaned spreadsheet. Everything runs locally in your browser — no data leaves your machine.</p>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>1 · Contact lot file</h2>
+      <p class="hint">Excel (.xlsx/.xls) or CSV.</p>
+      <div class="drop" id="drop">Drag &amp; drop your file here, or <strong>click to browse</strong>
+        <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+      </div>
+      <div class="file-row" id="fileRow"></div>
+      <div class="small">Tip: if nothing appears after you pick a file, make sure it isn't open in Excel, then try again.</div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Target country / countries</h2>
+      <p class="hint">Comma-separated. Numbers outside these are dropped (kept &amp; flagged only if it's the contact's sole number).</p>
+      <label for="countries">Target countries</label>
+      <input type="text" id="countries" list="countryList" placeholder="e.g. United States, United Kingdom">
+      <datalist id="countryList"></datalist>
+      <div class="small" id="ctryStatus"></div>
+      <div class="regions">
+        <div class="regions-head">
+          <label>Or target by region — tick to add all its countries</label>
+          <label class="allreg"><input type="checkbox" id="allRegions"> All regions</label>
+        </div>
+        <div class="region-chips" id="regionChips"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Excluded job titles</h2>
+      <p class="hint">One title/keyword per line. A Job Title containing any of these is tagged <em>DNC – Not Target Job Title</em> (case-insensitive).</p>
+      <label>Paste list (or load a .txt)</label>
+      <textarea id="excluded" placeholder="intern&#10;student&#10;assistant&#10;retired"></textarea>
+      <div class="row2" style="margin-top:8px">
+        <button class="ghost" id="loadTxtBtn" type="button">Load .txt file…</button>
+        <input type="file" id="txtFile" accept=".txt" hidden>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>4 · Run</h2>
+      <p class="hint">Builds Upload/Result Code, splits names, cleans phones to digits-with-country-code, adds Region, screens titles, sorts, and re-orders columns.</p>
+      <div class="btns">
+        <button class="primary" id="run" disabled>Clean &amp; Preview</button>
+        <button class="ghost" id="download" disabled>Download cleaned .xlsx</button>
+      </div>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <div id="summary">
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="tablewrap" id="tablewrap"><table id="table"></table></div>
+  <a class="dl" id="dlAnchor"></a>
+</main>
+
+<script>
+/* ============================ DATA MAPS ============================ */
+const COUNTRY_REGION = {
+ "Afghanistan":"MEA","Algeria":"Africa","Angola":"Africa","Argentina":"SA","Australia":"ANZ","Austria":"DACH",
+ "Azerbaijan":"FSE","Bahrain":"MEA","Bangladesh":"South Asia","Belgium":"BAN","Benin":"Africa",
+ "Bosnia and Herzegovina":"FSE","Botswana":"Africa","Brazil":"SA","Bulgaria":"FSE","Burkina Faso":"Africa",
+ "Cambodia":"SEA","Cameroon":"Africa","Canada":"NA","Cape Verde":"Africa","Chad":"Africa","Chile":"SA",
+ "China":"East Asia","Colombia":"SA","Congo":"Africa","Côte d'Ivoire":"Africa","Cuba":"SA","Czech Republic":"FSE",
+ "Democratic Republic of the Congo":"Africa","Denmark":"BAN","Dominican Republic":"SA","Egypt":"MEA","Estonia":"FSE",
+ "Ethiopia":"Africa","Faroe Islands":"BAN","Finland":"BAN","France":"FSE","Gabon":"Africa","Germany":"DACH",
+ "Ghana":"Africa","Greece":"FSE","Guinea":"Africa","Hong Kong":"East Asia","Hungary":"FSE","Iceland":"UKI",
+ "India":"South Asia","Indonesia":"SEA","Iran":"MEA","Iraq":"MEA","Ireland":"UKI","Isle of Man":"UKI",
+ "Israel":"MEA","Italy":"FSE","Japan":"East Asia","Jordan":"MEA","Kenya":"Africa","Kuwait":"MEA","Lebanon":"MEA",
+ "Lesotho":"Africa","Liberia":"Africa","Libya":"Africa","Lithuania":"FSE","Luxembourg":"BAN","Macedonia":"FSE",
+ "Madagascar":"Africa","Malawi":"Africa","Malaysia":"SEA","Maldives":"South Asia","Mali":"Africa","Mauritius":"Africa",
+ "Mexico":"SA","Mongolia":"East Asia","Morocco":"Africa","Mozambique":"Morocco","Myanmar":"South Asia",
+ "Namibia":"Africa","Netherlands":"BAN","New Zealand":"ANZ","Nigeria":"Africa","Norway":"BAN","Oman":"MEA",
+ "Pakistan":"West Asia","Palestine":"MEA","Philippines":"SEA","Poland":"FSE","Portugal":"FSE","Qatar":"MEA",
+ "Réunion":"Africa","Romania":"FSE","Russia":"North Asia","Rwanda":"Africa","Saudi Arabia":"MEA","Senegal":"Africa",
+ "Serbia":"FSE","Sierra Leone":"Africa","Singapore":"SEA","Slovakia":"FSE","Slovenia":"FSE","South Africa":"Africa",
+ "South Korea":"East Asia","South Sudan":"Africa","Spain":"FSE","Sri Lanka":"South Asia","Sudan":"Africa",
+ "Sweden":"BAN","Switzerland":"DACH","Syria":"MEA","Taiwan":"East Asia","Tanzania":"Africa","Thailand":"SEA",
+ "Tunisia":"Africa","Turkey":"MEA","UAE":"MEA","Uganda":"Africa","Ukraine":"FSE","United Arab Emirates":"MEA",
+ "United Kingdom":"UKI","United States":"NA","USA":"NA","Uzbekistan":"Central Asia","Venezuela":"SA","Vietnam":"SEA",
+ "Yemen":"Africa","Zambia":"Africa","Zimbabwe":"Africa","Monaco":"FSE","Albania":"FSE","Malta":"FSE","Bhutan":"Asia",
+ "Nepal":"Asia","Saudia Arabia":"MEA","Niger":"Africa","Cyprus":"MEA","Latvia":"FSE","Burundi":"Africa",
+ "Cote d’Ivoire":"Africa","Equatorial Guinea":"Africa","Seychelles":"Africa","Croatia":"FSE","Somalia":"Africa",
+ "Montenegro":"FSE"
+};
+const COUNTRY_ALIASES = {
+ "u.s.":"United States","u.s.a.":"United States","us":"United States","usa":"United States",
+ "united states of america":"United States","uk":"United Kingdom","u.k.":"United Kingdom",
+ "great britain":"United Kingdom","england":"United Kingdom","uae":"United Arab Emirates","korea":"South Korea",
+ "republic of korea":"South Korea","russian federation":"Russia","czechia":"Czech Republic",
+ "ivory coast":"Côte d'Ivoire","cote d'ivoire":"Côte d'Ivoire","viet nam":"Vietnam",
+ "the netherlands":"Netherlands","holland":"Netherlands"
+};
+const NAME_TO_ISO2 = {
+ "afghanistan":"AF","algeria":"DZ","angola":"AO","argentina":"AR","australia":"AU","austria":"AT","azerbaijan":"AZ",
+ "bahrain":"BH","bangladesh":"BD","belgium":"BE","benin":"BJ","bosnia and herzegovina":"BA","botswana":"BW",
+ "brazil":"BR","bulgaria":"BG","burkina faso":"BF","cambodia":"KH","cameroon":"CM","canada":"CA","cape verde":"CV",
+ "chad":"TD","chile":"CL","china":"CN","colombia":"CO","congo":"CG","côte d'ivoire":"CI","cote d'ivoire":"CI",
+ "cote d’ivoire":"CI","cuba":"CU","czech republic":"CZ","czechia":"CZ","democratic republic of the congo":"CD",
+ "denmark":"DK","dominican republic":"DO","egypt":"EG","estonia":"EE","ethiopia":"ET","faroe islands":"FO",
+ "finland":"FI","france":"FR","gabon":"GA","germany":"DE","ghana":"GH","greece":"GR","guinea":"GN","hong kong":"HK",
+ "hungary":"HU","iceland":"IS","india":"IN","indonesia":"ID","iran":"IR","iraq":"IQ","ireland":"IE","isle of man":"IM",
+ "israel":"IL","italy":"IT","japan":"JP","jordan":"JO","kenya":"KE","kuwait":"KW","lebanon":"LB","lesotho":"LS",
+ "liberia":"LR","libya":"LY","lithuania":"LT","luxembourg":"LU","macedonia":"MK","madagascar":"MG","malawi":"MW",
+ "malaysia":"MY","maldives":"MV","mali":"ML","mauritius":"MU","mexico":"MX","mongolia":"MN","morocco":"MA",
+ "mozambique":"MZ","myanmar":"MM","namibia":"NA","netherlands":"NL","new zealand":"NZ","nigeria":"NG","norway":"NO",
+ "oman":"OM","pakistan":"PK","palestine":"PS","philippines":"PH","poland":"PL","portugal":"PT","qatar":"QA",
+ "réunion":"RE","reunion":"RE","romania":"RO","russia":"RU","russian federation":"RU","rwanda":"RW",
+ "saudi arabia":"SA","saudia arabia":"SA","senegal":"SN","serbia":"RS","sierra leone":"SL","singapore":"SG",
+ "slovakia":"SK","slovenia":"SI","south africa":"ZA","south korea":"KR","korea":"KR","south sudan":"SS","spain":"ES",
+ "sri lanka":"LK","sudan":"SD","sweden":"SE","switzerland":"CH","syria":"SY","taiwan":"TW","tanzania":"TZ",
+ "thailand":"TH","tunisia":"TN","turkey":"TR","uae":"AE","united arab emirates":"AE","uganda":"UG","ukraine":"UA",
+ "united kingdom":"GB","uk":"GB","england":"GB","great britain":"GB","united states":"US","usa":"US","us":"US",
+ "uzbekistan":"UZ","venezuela":"VE","vietnam":"VN","viet nam":"VN","yemen":"YE","zambia":"ZM","zimbabwe":"ZW",
+ "monaco":"MC","albania":"AL","malta":"MT","bhutan":"BT","nepal":"NP","niger":"NE","cyprus":"CY","latvia":"LV",
+ "burundi":"BI","equatorial guinea":"GQ","seychelles":"SC","croatia":"HR","somalia":"SO","montenegro":"ME"
+};
+// reverse map: ISO2 -> a canonical country name present in COUNTRY_REGION (first-seen wins)
+const ISO2_TO_COUNTRY = {};
+Object.keys(COUNTRY_REGION).forEach(c=>{
+  const i = NAME_TO_ISO2[c.trim().replace(/\s+/g," ").toLowerCase()];
+  if(i && !ISO2_TO_COUNTRY[i]) ISO2_TO_COUNTRY[i] = c;
+});
+const FINAL_ORDER = ["Upload","Result Code","Country","Region","Phone","Phone 2","Phone3","LinkedIn URL",
+ "Company Name","First Name","Last Name","Full Name","Email","Addl Email","Job Title","Employee Size",
+ "Turnover","Industry"];
+const TAG_OUTSIDE = "Number outside specified country";
+const TAG_DNC_TITLE = "DNC - Not Target Job Title";
+const PHONE_HINTS = ["phone","mobile","tel","contact","cell","direct","number","hq","fax"];
+
+/* ============================ HELPERS ============================ */
+const norm = s => String(s==null?"":s).trim().replace(/\s+/g," ").toLowerCase();
+const isBlank = v => v==null || String(v).trim()==="" || String(v).trim().toLowerCase()==="nan";
+function canonicalCountry(raw){
+  if(isBlank(raw)) return null;
+  const n=norm(raw);
+  if(COUNTRY_ALIASES[n]) return COUNTRY_ALIASES[n];
+  for(const k in COUNTRY_REGION){ if(norm(k)===n) return k; }
+  return null;
+}
+function countryToIso2(raw){
+  if(isBlank(raw)) return null;
+  const n=norm(raw);
+  if(NAME_TO_ISO2[n]) return NAME_TO_ISO2[n];
+  const c=canonicalCountry(raw);
+  if(c && NAME_TO_ISO2[norm(c)]) return NAME_TO_ISO2[norm(c)];
+  return null;
+}
+function regionForCountry(raw){ const c=canonicalCountry(raw); return c?(COUNTRY_REGION[c]||""):""; }
+function findCol(cols, ...kws){
+  const lc=cols.map(c=>[c,norm(c)]);
+  for(const kw of kws){ for(const [c,n] of lc){ if(n.includes(kw)) return c; } }
+  return null;
+}
+function detectPhoneCols(cols){
+  return cols.filter(c=>{const n=norm(c); return PHONE_HINTS.some(h=>n.includes(h)) && !n.includes("email");});
+}
+const digitsOnly = s => String(s==null?"":s).replace(/\D/g,"");
+function splitName(full){
+  full=String(full==null?"":full).trim();
+  if(!full) return ["",""];
+  const p=full.split(/\s+/);
+  if(p.length===1) return [p[0],""];
+  return [p[0], p.slice(1).join(" ")];
+}
+function titleExcluded(title, list){
+  if(isBlank(title)||!list.length) return false;
+  const t=norm(title);
+  return list.some(ex=>t.includes(ex));
+}
+const get = (row,col)=> (col==null||isBlank(row[col]))?"":String(row[col]).trim();
+
+/* ============================ PHONE (libphonenumber-js) ============================ */
+const lpn = window.libphonenumber;
+function parseOne(raw, rowIso2, targetIso2){
+  raw=String(raw==null?"":raw).trim();
+  if(!raw) return null;
+  const hasPlus = raw.includes("+");
+  let digits = digitsOnly(raw);
+  if(!digits) return null;
+  if(lpn){
+    const tries=[];
+    if(hasPlus) tries.push(["+"+digits, undefined]);
+    else{
+      tries.push(["+"+digits, undefined]);
+      [rowIso2, ...targetIso2].forEach(r=>{ if(r) tries.push([digits, r]); });
+    }
+    for(const [val,reg] of tries){
+      try{
+        const pn = lpn.parsePhoneNumberFromString(val, reg);
+        if(pn && pn.isValid()) return {cleaned: pn.number.replace("+",""), iso2: pn.country||null};
+      }catch(e){}
+    }
+    return {cleaned:digits, iso2:null};
+  }
+  return {cleaned:digits, iso2:null};
+}
+function cleanRowPhones(rawNums, rowCountry, targetIso2){
+  const rowIso2=countryToIso2(rowCountry);
+  const parsed=[]; const seen=new Set();
+  for(const raw of rawNums){
+    if(isBlank(raw)) continue;
+    for(const piece of String(raw).split(/[;/]| or /)){
+      if(!piece.trim()) continue;
+      const r=parseOne(piece, rowIso2, targetIso2);
+      if(r && r.cleaned && !seen.has(r.cleaned)){ seen.add(r.cleaned); parsed.push(r); }
+    }
+  }
+  if(!parsed.length) return {kept:[], outside:false, iso2:null};
+  const tgt=parsed.filter(p=>targetIso2.includes(p.iso2));
+  if(tgt.length) return {kept:tgt.map(p=>p.cleaned).slice(0,3), outside:false, iso2:null};
+  return {kept:[parsed[0].cleaned], outside:true, iso2:parsed[0].iso2};
+}
+
+/* ============================ MAIN CLEAN ============================ */
+function cleanData(rows, cols, targetCountries, excluded){
+  const targetIso2=[...new Set(targetCountries.map(countryToIso2).filter(Boolean))];
+  const fullNameCol=findCol(cols,"full name","name");
+  const companyCol=findCol(cols,"company");
+  const countryCol=findCol(cols,"country");
+  const jobCol=findCol(cols,"job title","title","designation");
+  const phoneCols=detectPhoneCols(cols);
+  const linkedinCol=findCol(cols,"linkedin");
+  const emailCol=findCol(cols,"email");
+  const addlEmailCol=findCol(cols,"addl email","additional email","alt email","secondary email","email 2");
+  const sizeCol=findCol(cols,"employee","company size","headcount","size");
+  const turnoverCol=findCol(cols,"turnover","revenue");
+  const industryCol=findCol(cols,"industry","sector");
+
+  // Any input column not mapped to a standard field is "extra" — keep it at the far right
+  const consumed=new Set([fullNameCol,companyCol,countryCol,jobCol,linkedinCol,emailCol,addlEmailCol,sizeCol,turnoverCol,industryCol,...phoneCols].filter(Boolean));
+  const extraCols=cols.filter(c=>!consumed.has(c) && String(c).trim()!=="");
+  const extraOut=extraCols.map(c=>FINAL_ORDER.includes(c)?c+" (original)":c);
+
+  const out=rows.map(row=>{
+    const rowBlank = cols.every(c=>isBlank(row[c]));
+    const rec={};
+    rec["Country"]=get(row,countryCol);
+    rec["Region"]=rec["Country"]?regionForCountry(rec["Country"]):"";
+    rec["LinkedIn URL"]=get(row,linkedinCol);
+    rec["Company Name"]=get(row,companyCol);
+    rec["Full Name"]=get(row,fullNameCol);
+    rec["Email"]=get(row,emailCol);
+    rec["Addl Email"]=get(row,addlEmailCol);
+    rec["Job Title"]=get(row,jobCol);
+    rec["Employee Size"]=get(row,sizeCol);
+    rec["Turnover"]=get(row,turnoverCol);
+    rec["Industry"]=get(row,industryCol);
+    const [fn,ln]=splitName(rec["Full Name"]); rec["First Name"]=fn; rec["Last Name"]=ln;
+
+    const rawNums=phoneCols.map(c=>row[c]);
+    let kept=[], outside=false, outsideIso2=null;
+    if(targetIso2.length){ const r=cleanRowPhones(rawNums,rec["Country"],targetIso2); kept=r.kept; outside=r.outside; outsideIso2=r.iso2; }
+    else { kept=rawNums.filter(x=>!isBlank(x)).map(digitsOnly).slice(0,3); }
+    rec["Phone"]=kept[0]||""; rec["Phone 2"]=kept[1]||""; rec["Phone3"]=kept[2]||"";
+
+    // When the only number is outside the target country, re-derive Country/Region from the number's country code
+    if(outside && outsideIso2 && ISO2_TO_COUNTRY[outsideIso2]){
+      rec["Country"]=ISO2_TO_COUNTRY[outsideIso2];
+      rec["Region"]=regionForCountry(rec["Country"]);
+    }
+
+    rec["Upload"]=rowBlank?"":"Yes";
+    let codes=rowBlank?[]:["New"];
+    if(!rowBlank && titleExcluded(rec["Job Title"],excluded)) codes=[TAG_DNC_TITLE];
+    else if(!rowBlank && outside) codes=[TAG_OUTSIDE];
+    rec["Result Code"]=codes.join("; ");
+
+    // carry leftover original columns to the right end
+    extraCols.forEach((c,i)=>{ rec[extraOut[i]]=isBlank(row[c])?"":String(row[c]).trim(); });
+    return rec;
+  });
+
+  // Step 7: sort A-Z by Phone, Phone 2, Phone3, Company Name, Country; blanks last
+  const keys=["Phone","Phone 2","Phone3","Company Name","Country"];
+  out.sort((a,b)=>{
+    const ab=a["Upload"]===""?1:0, bb=b["Upload"]===""?1:0;
+    if(ab!==bb) return ab-bb;
+    for(const k of keys){
+      const x=String(a[k]||"").toLowerCase(), y=String(b[k]||"").toLowerCase();
+      if(x<y) return -1; if(x>y) return 1;
+    }
+    return 0;
+  });
+  return {rows: out, columns: FINAL_ORDER.concat(extraOut)};
+}
+
+/* ============================ UI ============================ */
+let RAW_ROWS=null, RAW_COLS=null, CLEANED=null, CLEANED_COLS=null, FILE_BASE="contact_lot";
+const $=id=>document.getElementById(id);
+const log=(m,err)=>{ const el=$("log"); el.innerHTML=(err?'<span class="err">'+m+'</span>':m); };
+
+// populate datalist
+Object.keys(COUNTRY_REGION).sort().forEach(c=>{ const o=document.createElement("option"); o.value=c; $("countryList").appendChild(o); });
+
+/* ---- region -> countries, for the region toggles ---- */
+const REGION_TO_COUNTRIES={};
+Object.entries(COUNTRY_REGION).forEach(([country,region])=>{ (REGION_TO_COUNTRIES[region]=REGION_TO_COUNTRIES[region]||[]).push(country); });
+const ALL_REGIONS=Object.keys(REGION_TO_COUNTRIES).sort();
+
+function parseInputCountries(){ return $("countries").value.split(",").map(s=>s.trim()).filter(Boolean); }
+function setInputCountries(arr){
+  const seen=new Set(), out=[];
+  arr.forEach(c=>{ const k=norm(c); if(c && !seen.has(k)){ seen.add(k); out.push(c); } });
+  $("countries").value=out.join(", ");
+  refreshCountryUI();
+}
+function addCountries(list){ setInputCountries([...parseInputCountries(), ...list]); }
+function removeCountries(list){
+  const drop=new Set(list.map(norm));
+  setInputCountries(parseInputCountries().filter(c=>!drop.has(norm(c))));
+}
+function updateCtryStatus(){
+  const list=parseInputCountries();
+  const unknown=list.filter(c=>!countryToIso2(c));
+  $("ctryStatus").innerHTML = list.length
+    ? (unknown.length? '<span class="err">Unrecognized: '+unknown.join(", ")+'</span>'
+                     : '<span style="color:var(--good)">'+list.length+' target(s) recognized.</span>')
+    : "";
+}
+function syncRegionChips(){
+  const present=new Set(parseInputCountries().map(norm));
+  let allOn=true;
+  ALL_REGIONS.forEach(region=>{
+    const cb=document.getElementById("reg_"+region);
+    if(!cb) return;
+    const on=REGION_TO_COUNTRIES[region].every(c=>present.has(norm(c)));
+    cb.checked=on;
+    cb.closest(".region-chip").classList.toggle("on",on);
+    if(!on) allOn=false;
+  });
+  $("allRegions").checked=allOn;
+}
+function refreshCountryUI(){ updateCtryStatus(); syncRegionChips(); }
+
+// build region chips
+(function buildRegionChips(){
+  const wrap=$("regionChips");
+  ALL_REGIONS.forEach(region=>{
+    const lbl=document.createElement("label");
+    lbl.className="region-chip";
+    lbl.innerHTML='<input type="checkbox" id="reg_'+region+'"> '+region+' <span class="cnt">'+REGION_TO_COUNTRIES[region].length+'</span>';
+    wrap.appendChild(lbl);
+    lbl.querySelector("input").addEventListener("change",e=>{
+      if(e.target.checked) addCountries(REGION_TO_COUNTRIES[region]);
+      else removeCountries(REGION_TO_COUNTRIES[region]);
+    });
+  });
+})();
+$("allRegions").addEventListener("change",e=>{
+  const all=[]; ALL_REGIONS.forEach(r=>all.push(...REGION_TO_COUNTRIES[r]));
+  if(e.target.checked) addCountries(all); else removeCountries(all);
+});
+
+// file pickers
+$("drop").addEventListener("click",()=>$("file").click());
+["dragover","dragenter"].forEach(e=>$("drop").addEventListener(e,ev=>{ev.preventDefault();$("drop").classList.add("drag");}));
+["dragleave","drop"].forEach(e=>$("drop").addEventListener(e,ev=>{ev.preventDefault();$("drop").classList.remove("drag");}));
+$("drop").addEventListener("drop",ev=>{ if(ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]); });
+$("file").addEventListener("change",ev=>{ if(ev.target.files.length) handleFile(ev.target.files[0]); });
+$("loadTxtBtn").addEventListener("click",()=>$("txtFile").click());
+$("txtFile").addEventListener("change",ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ const lines=String(r.result).split(/\r?\n/).filter(l=>l.trim()&&!l.trim().startsWith("#")); $("excluded").value=lines.join("\n"); };
+  r.readAsText(f);
+});
+$("countries").addEventListener("input", refreshCountryUI);
+
+// Make sure the spreadsheet engine is available (loaded from the local xlsx.full.min.js).
+function ensureXLSX(ok, fail){
+  if(typeof XLSX!=="undefined"){ ok(); return; }
+  fail();
+}
+
+function handleFile(file){
+  FILE_BASE=file.name.replace(/\.[^.]+$/,"");
+  $("fileRow").style.display="block";
+  $("fileRow").innerHTML='Reading <b>'+escapeHtml(file.name)+'</b> …';
+  $("run").disabled=true; $("download").disabled=true; log("");
+  ensureXLSX(()=>readFile(file), ()=>{
+    $("fileRow").innerHTML='<span class="err">✗ The spreadsheet engine isn\'t loaded. Make sure <b>xlsx.full.min.js</b> is in the same folder as this page, then reopen it.</span>';
+  });
+}
+
+function readFile(file){
+  const reader=new FileReader();
+  reader.onerror=()=>{
+    $("fileRow").innerHTML='<span class="err">✗ Couldn\'t read the file. If it\'s open in Excel, close it first, then try again.</span>';
+  };
+  reader.onload=e=>{
+    try{
+      const data=new Uint8Array(e.target.result);
+      const wb=XLSX.read(data,{type:"array"});
+      // use the first sheet that actually has rows
+      let json=[], usedSheet="";
+      for(const name of wb.SheetNames){
+        const arr=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:"",raw:false,blankrows:false});
+        if(arr.length){ json=arr; usedSheet=name; break; }
+      }
+      if(!json.length){ $("fileRow").innerHTML='<span class="err">✗ The file has no data rows.</span>'; return; }
+      RAW_COLS=json[0].map(h=>String(h).trim());
+      RAW_ROWS=json.slice(1).map(arr=>{ const o={}; RAW_COLS.forEach((c,i)=>o[c]=arr[i]!=null?arr[i]:""); return o; });
+      $("fileRow").innerHTML='<span class="tag">✓ '+escapeHtml(file.name)+'</span> — '+RAW_ROWS.length+' rows, '+RAW_COLS.length+' columns'+(wb.SheetNames.length>1?' (sheet "'+escapeHtml(usedSheet)+'")':'')+'.';
+      $("run").disabled=false;
+      log("Detected columns: "+RAW_COLS.join(", "));
+    }catch(err){ $("fileRow").innerHTML='<span class="err">✗ Could not parse the file: '+escapeHtml(err.message)+'</span>'; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+$("run").addEventListener("click",()=>{
+  if(!RAW_ROWS){ log("Load a file first.",true); return; }
+  const targets=parseInputCountries();
+  if(!targets.length){ log("Enter at least one target country or pick a region.",true); return; }
+  const excluded=$("excluded").value.split(/\r?\n/).map(norm).filter(l=>l&&!l.startsWith("#"));
+  try{
+    const res=cleanData(RAW_ROWS,RAW_COLS,targets,excluded);
+    CLEANED=res.rows; CLEANED_COLS=res.columns;
+    renderSummary(CLEANED);
+    renderTable(CLEANED, CLEANED_COLS);
+    $("download").disabled=false;
+    log("Cleaned "+CLEANED.length+" rows. Review the preview, then download."+(lpn?"":" (phone library failed to load — numbers were only stripped, not country-validated.)"));
+  }catch(err){ log("Error while cleaning: "+err.message,true); }
+});
+
+function renderSummary(rows){
+  const counts={};
+  rows.forEach(r=>{ const k=r["Result Code"]||"(blank)"; counts[k]=(counts[k]||0)+1; });
+  const cls=k=> k===TAG_DNC_TITLE?"dnc":k===TAG_OUTSIDE?"out":k==="New"?"new":"";
+  $("chips").innerHTML=Object.entries(counts).map(([k,v])=>'<span class="chip '+cls(k)+'">'+k+': <b>'+v+'</b></span>').join("");
+  $("summary").style.display="block";
+}
+function renderTable(rows, columns){
+  const cols=columns||FINAL_ORDER;
+  const max=Math.min(rows.length,100);
+  let h="<thead><tr>"+cols.map(c=>"<th>"+escapeHtml(c)+"</th>").join("")+"</tr></thead><tbody>";
+  for(let i=0;i<max;i++){
+    h+="<tr>"+cols.map(c=>{
+      let cls="";
+      if(c==="Result Code"){ const v=rows[i][c]; cls=v===TAG_DNC_TITLE?"rc-dnc":v===TAG_OUTSIDE?"rc-out":v==="New"?"rc-new":""; }
+      return '<td class="'+cls+'">'+escapeHtml(rows[i][c]||"")+"</td>";
+    }).join("")+"</tr>";
+  }
+  h+="</tbody>";
+  $("table").innerHTML=h;
+  $("tablewrap").style.display="block";
+  if(rows.length>max) log("Showing first "+max+" of "+rows.length+" rows in preview. Full set is in the download.");
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+$("download").addEventListener("click",()=>{
+  if(!CLEANED) return;
+  const cols=CLEANED_COLS||FINAL_ORDER;
+  const aoa=[cols, ...CLEANED.map(r=>cols.map(c=>r[c]==null?"":r[c]))];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Cleaned");
+  XLSX.writeFile(wb, FILE_BASE+"_cleaned.xlsx");
+});
+</script>
+</body>
+</html>

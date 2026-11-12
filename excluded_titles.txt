@@ -1,0 +1,5 @@
+# One excluded title or keyword per line. Case-insensitive substring match.
+intern
+student
+assistant
+retired
